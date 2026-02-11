@@ -804,8 +804,10 @@ func (sb *sqliteBackend) GetActivityTask(ctx context.Context, queues []workflow.
 	}
 
 	var metadata *workflow.Metadata
-	if err := json.Unmarshal([]byte(metadataJson.String), &metadata); err != nil {
-		return nil, fmt.Errorf("unmarshaling metadata: %w", err)
+	if metadataJson.Valid {
+		if err := json.Unmarshal([]byte(metadataJson.String), &metadata); err != nil {
+			return nil, fmt.Errorf("unmarshaling metadata: %w", err)
+		}
 	}
 
 	t := &backend.ActivityTask{
