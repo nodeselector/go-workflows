@@ -81,7 +81,7 @@ func newSqliteBackend(dsn string, opts ...option) *sqliteBackend {
 	}
 
 	if options.AutoVacuum != "" {
-		_, err = db.Exec("PRAGMA auto_vacuum=?;", options.AutoVacuum)
+		_, err = db.Exec(fmt.Sprintf("PRAGMA auto_vacuum=%s;", options.AutoVacuum))
 		if err != nil {
 			panic(err)
 		}
