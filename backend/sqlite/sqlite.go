@@ -32,11 +32,22 @@ import (
 //go:embed db/migrations/*.sql
 var migrationsFS embed.FS
 
+// connectionPragmas holds the per-connection PRAGMAs appended to the DSN so that
+// every connection the pool opens - including ones opened after a connection is
+// recycled - is configured identically. journal_mode=WAL is persisted in the
+// database header, but busy_timeout is a per-connection setting that must be
+// re-applied on each new connection.
+const connectionPragmas = "&_pragma=journal_mode(WAL)&_pragma=busy_timeout(5000)"
+
 func NewInMemoryBackend(opts ...option) *sqliteBackend {
 	// Use a unique named in-memory database
 	dsn := fmt.Sprintf("file:%s?mode=memory&cache=shared&_txlock=immediate", uuid.NewString())
 	b := newSqliteBackend(dsn, opts...)
 
+	// Disable connection recycling for the in-memory backend: the shared in-memory
+	// database only exists for as long as at least one connection to it is open, so
+	// recycling connections would risk dropping the database entirely.
+	b.db.SetConnMaxLifetime(0)
 	b.db.SetConnMaxIdleTime(0)
 	b.db.SetMaxIdleConns(1)
 
@@ -60,23 +71,24 @@ func newSqliteBackend(dsn string, opts ...option) *sqliteBackend {
 	options := &options{
 		Options:         backend.ApplyOptions(),
 		ApplyMigrations: true,
+		ConnMaxLifetime: defaultConnMaxLifetime,
+		ConnMaxIdleTime: defaultConnMaxIdleTime,
 	}
 
 	for _, opt := range opts {
 		opt(options)
 	}
 
+	// Apply per-connection PRAGMAs through the DSN rather than a one-off db.Exec.
+	// busy_timeout in particular is a per-connection setting; applying it via
+	// db.Exec only configures whichever single connection happened to run the
+	// statement, so it would be silently lost as soon as that connection is
+	// recycled and replaced by a fresh one. Setting it in the DSN guarantees every
+	// connection the pool opens - now and after any recycling - receives it.
+	dsn += connectionPragmas
+
 	db, err := sql.Open("sqlite", dsn)
 	if err != nil {
-		panic(err)
-	}
-
-	// Set WAL mode via PRAGMA
-	if _, err := db.Exec("PRAGMA journal_mode=WAL;"); err != nil {
-		panic(err)
-	}
-
-	if _, err = db.Exec("PRAGMA busy_timeout = 5000;"); err != nil {
 		panic(err)
 	}
 
@@ -98,6 +110,17 @@ func newSqliteBackend(dsn string, opts ...option) *sqliteBackend {
 	// A frequently used workaround is to have a single connection, effectively acting as a mutex
 	// See https://github.com/mattn/go-sqlite3/issues/274 for more context
 	db.SetMaxOpenConns(1)
+
+	// Recycle the pooled connection periodically. Because the pool is capped to a
+	// single connection, a driver-level fault - such as a COMMIT that fails with
+	// SQLITE_BUSY and leaves the transaction dangling - would otherwise wedge the
+	// backend until the process is restarted: every subsequent BeginTx on that same
+	// connection fails with "cannot start a transaction within a transaction".
+	// Bounding the connection's lifetime and idle time guarantees the tainted
+	// connection is eventually closed and replaced, allowing the backend to
+	// self-heal without a restart.
+	db.SetConnMaxLifetime(options.ConnMaxLifetime)
+	db.SetConnMaxIdleTime(options.ConnMaxIdleTime)
 
 	b := &sqliteBackend{
 		db:         db,

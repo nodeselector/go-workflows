@@ -1,7 +1,9 @@
 package sqlite
 
 import (
+	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 
@@ -72,5 +74,52 @@ func Test_SqliteBackend_WorkerName(t *testing.T) {
 
 		// Verify the worker name is stored correctly
 		require.Equal(t, customWorkerName, backend.workerName)
+	})
+}
+
+// Test_SqliteBackend_ConnectionPragmas verifies that the per-connection PRAGMAs
+// are applied through the DSN. This matters because the file-backed pool now
+// recycles its single connection: busy_timeout is a per-connection setting, so
+// it must live in the DSN to survive a connection being replaced. If it were
+// applied via a one-off db.Exec it would silently drop back to 0 on the fresh
+// connection, making SQLITE_BUSY failures far more likely.
+func Test_SqliteBackend_ConnectionPragmas(t *testing.T) {
+	dir := t.TempDir()
+	b := NewSqliteBackend(filepath.Join(dir, "pragmas.sqlite"))
+	defer b.Close()
+
+	var busyTimeout int
+	require.NoError(t, b.db.QueryRow("PRAGMA busy_timeout;").Scan(&busyTimeout))
+	require.Equal(t, 5000, busyTimeout)
+
+	var journalMode string
+	require.NoError(t, b.db.QueryRow("PRAGMA journal_mode;").Scan(&journalMode))
+	require.Equal(t, "wal", journalMode)
+}
+
+// Test_SqliteBackend_ConnectionRecycling verifies that the file-backed backend
+// configures connection recycling so that a wedged connection can be reclaimed
+// without a process restart, and that callers can override the defaults.
+func Test_SqliteBackend_ConnectionRecycling(t *testing.T) {
+	dir := t.TempDir()
+
+	t.Run("Defaults", func(t *testing.T) {
+		b := NewSqliteBackend(filepath.Join(dir, "defaults.sqlite"))
+		defer b.Close()
+
+		require.Equal(t, defaultConnMaxLifetime, b.options.ConnMaxLifetime)
+		require.Equal(t, defaultConnMaxIdleTime, b.options.ConnMaxIdleTime)
+	})
+
+	t.Run("Overrides", func(t *testing.T) {
+		b := NewSqliteBackend(
+			filepath.Join(dir, "overrides.sqlite"),
+			WithConnMaxLifetime(30*time.Second),
+			WithConnMaxIdleTime(15*time.Second),
+		)
+		defer b.Close()
+
+		require.Equal(t, 30*time.Second, b.options.ConnMaxLifetime)
+		require.Equal(t, 15*time.Second, b.options.ConnMaxIdleTime)
 	})
 }
