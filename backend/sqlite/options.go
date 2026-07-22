@@ -1,7 +1,6 @@
 package sqlite
 
 import (
-	"strings"
 	"time"
 
 	"github.com/cschleiden/go-workflows/backend"
@@ -22,18 +21,15 @@ type options struct {
 	// ApplyMigrations automatically applies database migrations on startup.
 	ApplyMigrations bool
 
-	// AutoVacuum runs `PRAGMA auto_vacuum=<status>` when creating the connection to enable the sqlite auto-vacuum feature.
+	// AutoVacuum runs the `PRAGMA auto_vacuum=full` when creating the connection to enable the sqlite auto-vacuum feature.
 	//
-	// If AutoVacuum is set to full or incremental for an existing database, clients may wish to also set
-	// VacuumOnStart=true to ensure auto-vacuum is correctly enabled.
+	// The `VACUUM` statement is always run after enabling auto-vacuum to ensure auto-vacuum is correctly enabled and to
+	// reorganize the database file and reclaim disk space.
 	//
 	// See
 	// - https://sqlite.org/pragma.html#pragma_auto_vacuum
 	// - https://sqlite.org/lang_vacuum.html.
-	AutoVacuum string
-
-	// VacuumOnStart runs `VACUUM;` when creating the backend database connection.
-	VacuumOnStart bool
+	AutoVacuum bool
 
 	// ConnMaxLifetime bounds the maximum amount of time a pooled connection may be
 	// reused before it is closed and replaced. Because the file-backed pool is
@@ -84,33 +80,9 @@ func WithBackendOptions(opts ...backend.BackendOption) option {
 	}
 }
 
-// WithAutoVacuum sets sqlite auto-vacuum to the provided status. See options.AutoVacuum for details.
-func WithAutoVacuum(status string) option {
+// WithAutoVacuum sets sqlite auto-vacuum to full. See options.AutoVacuum for details.
+func WithAutoVacuum() option {
 	return func(o *options) {
-		status = strings.ToLower(status)
-
-		switch status {
-		case "0", "none", "1", "full", "2", "incremental":
-			o.AutoVacuum = status
-		default:
-			o.AutoVacuum = ""
-		}
-	}
-}
-
-// WithFullAutoVacuum sets sqlite auto-vacuum to full. See options.AutoVacuum for details.
-func WithFullAutoVacuum() option {
-	return WithAutoVacuum("full")
-}
-
-// WithIncrementalAutoVacuum sets sqlite auto-vacuum to incremental. See options.AutoVacuum for details.
-func WithIncrementalAutoVacuum() option {
-	return WithAutoVacuum("incremental")
-}
-
-// WithVacuumOnStart sets options.VacuumOnStart=true.
-func WithVacuumOnStart() option {
-	return func(o *options) {
-		o.VacuumOnStart = true
+		o.AutoVacuum = true
 	}
 }
