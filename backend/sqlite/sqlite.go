@@ -10,9 +10,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/google/uuid"
-	"go.opentelemetry.io/otel/trace"
-
 	"github.com/cschleiden/go-workflows/backend"
 	"github.com/cschleiden/go-workflows/backend/history"
 	"github.com/cschleiden/go-workflows/backend/metadata"
@@ -21,6 +18,8 @@ import (
 	"github.com/cschleiden/go-workflows/internal/metrickeys"
 	"github.com/cschleiden/go-workflows/internal/workflowerrors"
 	"github.com/cschleiden/go-workflows/workflow"
+	"github.com/google/uuid"
+	"go.opentelemetry.io/otel/trace"
 
 	_ "modernc.org/sqlite"
 
@@ -92,18 +91,6 @@ func newSqliteBackend(dsn string, opts ...option) *sqliteBackend {
 		panic(err)
 	}
 
-	if options.AutoVacuum {
-		_, err = db.Exec("PRAGMA auto_vacuum=full;")
-		if err != nil {
-			panic(err)
-		}
-
-		_, err = db.Exec("VACUUM;")
-		if err != nil {
-			panic(err)
-		}
-	}
-
 	// SQLite does not support multiple writers on the database, see https://www.sqlite.org/faq.html#q5
 	// A frequently used workaround is to have a single connection, effectively acting as a mutex
 	// See https://github.com/mattn/go-sqlite3/issues/274 for more context
@@ -114,7 +101,7 @@ func newSqliteBackend(dsn string, opts ...option) *sqliteBackend {
 	// SQLITE_BUSY and leaves the transaction dangling - would otherwise wedge the
 	// backend until the process is restarted: every subsequent BeginTx on that same
 	// connection fails with "cannot start a transaction within a transaction".
-	// Bounding the connection's lifetime and idle time guarantees the tainted
+	// Bounding the connection's lifetime and idle time guarantees the blocked
 	// connection is eventually closed and replaced, allowing the backend to
 	// self-heal without a restart.
 	db.SetConnMaxLifetime(options.ConnMaxLifetime)

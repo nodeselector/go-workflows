@@ -19,8 +19,8 @@ func Test_SqliteBackend(t *testing.T) {
 
 	test.BackendTest(t, func(options ...backend.BackendOption) test.TestBackend {
 		// Disable sticky workflow behavior for the test execution
-		return NewInMemoryBackend(WithBackendOptions(append(options, backend.WithStickyTimeout(0))...), WithAutoVacuum())
-		// return NewSqliteBackend("test.sqlite", WithBackendOptions(append(options, backend.WithStickyTimeout(0))...), WithAutoVacuum())
+		return NewInMemoryBackend(WithBackendOptions(append(options, backend.WithStickyTimeout(0))...))
+		// return NewSqliteBackend("test.sqlite", WithBackendOptions(append(options, backend.WithStickyTimeout(0))...))
 	}, func(b test.TestBackend) {
 		// Ensure we close the database so the next test will get a clean in-memory db
 		require.NoError(t, b.(*sqliteBackend).Close())
@@ -34,7 +34,7 @@ func Test_EndToEndSqliteBackend(t *testing.T) {
 
 	test.EndToEndBackendTest(t, func(options ...backend.BackendOption) test.TestBackend {
 		// Disable sticky workflow behavior for the test execution
-		return NewInMemoryBackend(WithBackendOptions(append(options, backend.WithStickyTimeout(0))...), WithAutoVacuum())
+		return NewInMemoryBackend(WithBackendOptions(append(options, backend.WithStickyTimeout(0))...))
 	}, func(b test.TestBackend) {
 		// Ensure we close the database so the next test will get a clean in-memory db
 		require.NoError(t, b.Close())
@@ -125,14 +125,13 @@ func Test_SqliteBackend_ConnectionRecycling(t *testing.T) {
 	})
 }
 
-// Test_SqliteBackend_RecoversFromWedgedConnection reproduces the production
-// failure mode this change guards against and proves the backend self-heals.
+// Test_SqliteBackend_RecoversFromWedgedConnection reproduces the failure mode
+// this change guards against and proves the backend self-heals.
 //
 // The file-backed pool is capped to a single connection. If a transaction is
-// left open on that connection - as happened in production when a COMMIT failed
-// with SQLITE_BUSY - every subsequent BeginTx fails with "cannot start a
-// transaction within a transaction" and the backend stays wedged until the
-// process is restarted. Here we deliberately wedge the sole connection by
+// left open on that connection, every subsequent BeginTx fails with "cannot start a
+// transaction within a transaction" and the backend is blocked until the
+// process is restarted. For this test, we deliberately wedge the sole connection by
 // issuing a raw BEGIN that database/sql does not track and returning the
 // connection to the pool, then assert that once the connection's max lifetime
 // elapses it is recycled and the backend can begin transactions again without a
@@ -150,14 +149,14 @@ func Test_SqliteBackend_RecoversFromWedgedConnection(t *testing.T) {
 
 	// Wedge the single pooled connection: BEGIN starts a transaction that
 	// database/sql does not know about, so closing the *sql.Conn returns the
-	// tainted connection to the pool with the transaction still open.
+	// blocked connection to the pool with the transaction still open.
 	conn, err := b.db.Conn(ctx)
 	require.NoError(t, err)
 	_, err = conn.ExecContext(ctx, "BEGIN")
 	require.NoError(t, err)
 	require.NoError(t, conn.Close())
 
-	// The backend is now wedged exactly as it was in production.
+	// The backend is now wedged.
 	tx, err := b.db.BeginTx(ctx, nil)
 	if err == nil {
 		_ = tx.Rollback()

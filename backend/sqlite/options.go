@@ -21,16 +21,6 @@ type options struct {
 	// ApplyMigrations automatically applies database migrations on startup.
 	ApplyMigrations bool
 
-	// AutoVacuum runs the `PRAGMA auto_vacuum=full` when creating the connection to enable the sqlite auto-vacuum feature.
-	//
-	// The `VACUUM` statement is always run after enabling auto-vacuum to ensure auto-vacuum is correctly enabled and to
-	// reorganize the database file and reclaim disk space.
-	//
-	// See
-	// - https://sqlite.org/pragma.html#pragma_auto_vacuum
-	// - https://sqlite.org/lang_vacuum.html.
-	AutoVacuum bool
-
 	// ConnMaxLifetime bounds the maximum amount of time a pooled connection may be
 	// reused before it is closed and replaced. Because the file-backed pool is
 	// capped to a single connection, bounding its lifetime allows the backend to
@@ -41,7 +31,7 @@ type options struct {
 
 	// ConnMaxIdleTime bounds the maximum amount of time a pooled connection may
 	// remain idle before it is closed. Together with ConnMaxLifetime this ensures a
-	// tainted connection is eventually discarded so the backend can self-heal. A
+	// blocked connection is eventually discarded so the backend can self-heal. A
 	// value <= 0 disables idle-time recycling.
 	ConnMaxIdleTime time.Duration
 }
@@ -77,12 +67,5 @@ func WithBackendOptions(opts ...backend.BackendOption) option {
 		for _, opt := range opts {
 			opt(o.Options)
 		}
-	}
-}
-
-// WithAutoVacuum sets sqlite auto-vacuum to full. See options.AutoVacuum for details.
-func WithAutoVacuum() option {
-	return func(o *options) {
-		o.AutoVacuum = true
 	}
 }
