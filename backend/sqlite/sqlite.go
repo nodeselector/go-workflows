@@ -41,13 +41,15 @@ const connectionPragmas = "&_pragma=journal_mode(WAL)&_pragma=busy_timeout(5000)
 func NewInMemoryBackend(opts ...option) *sqliteBackend {
 	// Use a unique named in-memory database
 	dsn := fmt.Sprintf("file:%s?mode=memory&cache=shared&_txlock=immediate", uuid.NewString())
-	b := newSqliteBackend(dsn, opts...)
 
 	// Disable connection recycling for the in-memory backend: the shared in-memory
 	// database only exists for as long as at least one connection to it is open, so
-	// recycling connections would risk dropping the database entirely.
-	b.db.SetConnMaxLifetime(0)
-	b.db.SetConnMaxIdleTime(0)
+	// recycling connections would risk dropping the database entirely. These options
+	// are appended last so they take precedence over any caller-supplied values and
+	// keep b.options in agreement with the pool configured on the *sql.DB.
+	opts = append(opts, WithConnMaxLifetime(0), WithConnMaxIdleTime(0))
+	b := newSqliteBackend(dsn, opts...)
+
 	b.db.SetMaxIdleConns(1)
 
 	// WORKAROUND: Keep a connection open at all times to prevent the in-memory db from being dropped
