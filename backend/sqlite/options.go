@@ -9,7 +9,7 @@ import (
 // defaultConnMaxLifetime and defaultConnMaxIdleTime bound how long the
 // file-backed pool's single connection may live and sit idle before it is
 // recycled. They default to non-zero values so that existing callers pick up
-// the self-healing behavior without having to opt in.
+// the self-recovery behavior without having to opt in.
 const (
 	defaultConnMaxLifetime = 5 * time.Minute
 	defaultConnMaxIdleTime = 5 * time.Minute
@@ -31,7 +31,7 @@ type options struct {
 
 	// ConnMaxIdleTime bounds the maximum amount of time a pooled connection may
 	// remain idle before it is closed. Together with ConnMaxLifetime this ensures a
-	// blocked connection is eventually discarded so the backend can self-heal. A
+	// blocked connection is eventually discarded so the backend can self-recover. A
 	// value <= 0 disables idle-time recycling.
 	ConnMaxIdleTime time.Duration
 }

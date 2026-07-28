@@ -105,7 +105,7 @@ func newSqliteBackend(dsn string, opts ...option) *sqliteBackend {
 	// connection fails with "cannot start a transaction within a transaction".
 	// Bounding the connection's lifetime and idle time guarantees the blocked
 	// connection is eventually closed and replaced, allowing the backend to
-	// self-heal without a restart.
+	// self-recover without a restart.
 	db.SetConnMaxLifetime(options.ConnMaxLifetime)
 	db.SetConnMaxIdleTime(options.ConnMaxIdleTime)
 
